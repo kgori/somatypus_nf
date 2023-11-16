@@ -3,6 +3,7 @@ params.inputDir
 params.reference
 params.regions = ""
 params.extra = ""
+params.vcfSplitSize = 2000000
 
 def pair_vcfs_with_index(ch) {
     // ch is a flat channel of VCFs and index files
@@ -27,26 +28,29 @@ def remove_duplicate_filepair_keys(primary_ch, secondary_ch) {
         map { it -> tuple(it[0], it[1][0]) }
 }
 
-/* STEP 1 */    include { individual_calling }                               from "./modules/somatypus_modules.nf"
-/* STEP 2 */    include { alternative_calling }                              from "./modules/somatypus_modules.nf"
-/* STEP 3 */    include { split_calls }                                      from "./modules/somatypus_modules.nf"
-/* STEP 4 */    include { filter_calls }                                     from "./modules/somatypus_modules.nf"
-/* STEP 5 */    include { indel_flag2 }                                      from "./modules/somatypus_modules.nf"
-/* STEP 5 */    include { merge_indel_flagged }                              from "./modules/somatypus_modules.nf"
-/* STEP 6 */    include { merge_filtered }                                   from "./modules/somatypus_modules.nf"
-/* STEP 7 */    include { extract_indels }                                   from "./modules/somatypus_modules.nf"
-/* STEP 7 */    include { merge_extracted_indels }                           from "./modules/somatypus_modules.nf"
-/* STEPS 8-16 */include { genotype as genotype_merged_snvs_allele1 }         from "./modules/somatypus_modules.nf"
-/* STEPS 8-16 */include { genotype as genotype_merged_snvs_allele2 }         from "./modules/somatypus_modules.nf"
-/* STEPS 8-16 */include { genotype as genotype_merged_snvs_allele3 }         from "./modules/somatypus_modules.nf"
-/* STEPS 8-16 */include { genotype as genotype_indel_excluded_snvs_allele1 } from "./modules/somatypus_modules.nf"
-/* STEPS 8-16 */include { genotype as genotype_indel_excluded_snvs_allele2 } from "./modules/somatypus_modules.nf"
-/* STEPS 8-16 */include { genotype as genotype_indel_excluded_snvs_allele3 } from "./modules/somatypus_modules.nf"
-/* STEPS 8-16 */include { genotype as genotype_indels }                      from "./modules/somatypus_modules.nf"
-include { split_vcf_into_n_rows as split_merged_vcf_into_n_rows }            from "./modules/somatypus_modules.nf"
-include { split_vcf_into_n_rows as split_indel_excluded_vcf_into_n_rows }    from "./modules/somatypus_modules.nf"
-include { merge_vcf as merge_genotyped_merged_snvs }                         from "./modules/somatypus_modules.nf"
-include { merge_vcf as merge_genotyped_indel_excluded_snvs }                 from "./modules/somatypus_modules.nf"
+/* STEP 1 */    include { individual_calling }                                 from "./modules/somatypus_modules.nf"
+/* STEP 2 */    include { alternative_calling }                                from "./modules/somatypus_modules.nf"
+/* STEP 3 */    include { split_calls }                                        from "./modules/somatypus_modules.nf"
+/* STEP 4 */    include { filter_calls }                                       from "./modules/somatypus_modules.nf"
+/* STEP 5 */    include { indel_flag2 }                                        from "./modules/somatypus_modules.nf"
+/* STEP 5 */    include { merge_indel_flagged }                                from "./modules/somatypus_modules.nf"
+/* STEP 6 */    include { merge_filtered }                                     from "./modules/somatypus_modules.nf"
+/* STEP 7 */    include { extract_indels }                                     from "./modules/somatypus_modules.nf"
+/* STEP 7 */    include { merge_extracted_indels }                             from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { genotype as genotype_merged_snvs_allele1 }           from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { genotype as genotype_merged_snvs_allele2 }           from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { genotype as genotype_merged_snvs_allele3 }           from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { genotype as genotype_indel_excluded_snvs_allele1 }   from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { genotype as genotype_indel_excluded_snvs_allele2 }   from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { genotype as genotype_indel_excluded_snvs_allele3 }   from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { genotype as genotype_indels }                        from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { split_vcf_into_n_rows as split_merged_snvs }         from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { split_vcf_into_n_rows as split_indel_excluded_snvs } from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { merge_vcf as merge_genotyped_merged_snvs }           from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { merge_vcf as merge_genotyped_indel_excluded_snvs }   from "./modules/somatypus_modules.nf"
+/* STEP 17 */   include { merge_filter_indelflagged }                          from "./modules/somatypus_modules.nf"
+/* STEP 17 */   include { finalise_snvs }                                      from "./modules/somatypus_modules.nf"
+/* STEP 17 */   include { finalise_indels }                                    from "./modules/somatypus_modules.nf"
 
 workflow {
     bam_bai_inputs   = Channel.fromFilePairs("${params.inputDir}/*.bam{,.bai}")
@@ -76,12 +80,12 @@ workflow {
     bams = inputs.map { it -> it[1][0] }.collect().map { it -> tuple("bams", it) }
     bais = inputs.map { it -> it[1][1] }.collect().map { it -> tuple("bais", it) }
      
-    merged_snvs_allele1 = split_merged_vcf_into_n_rows(snv_merged[0] | pair_vcfs_with_index, 22740)
+    merged_snvs_allele1 = split_merged_snvs(snv_merged[0] | pair_vcfs_with_index, "${params.vcfSplitSize}")
         .flatten()
         .map { it -> tuple ( it.baseName - ~/.gz/, it ) } | groupTuple
     merged_snvs_allele2 = snv_merged[1] | pair_vcfs_with_index
     merged_snvs_allele3 = snv_merged[2] | pair_vcfs_with_index
-    indel_excluded_allele1 = split_indel_excluded_vcf_into_n_rows(snv_merged[3] | pair_vcfs_with_index, 5000)
+    indel_excluded_allele1 = split_indel_excluded_snvs(snv_merged[3] | pair_vcfs_with_index, "${params.vcfSplitSize}")
         .flatten()
         .map { it -> tuple ( it.baseName - ~/.gz/, it ) } | groupTuple
     indel_excluded_allele2 = snv_merged[4] | pair_vcfs_with_index
@@ -132,4 +136,36 @@ workflow {
       .combine(indels))
 
     // Steps 17-18 to merge the results
+    iex = genotyped_iex1.mix(genotyped_iex2).mix(genotyped_iex3)
+        | map { it[1] } 
+        | flatten 
+        | branch {
+            index: it =~ /vcf.gz.(csi|tbi)$/
+            vcf: it =~ /vcf.gz$/
+        } 
+    //     .combine(genotyped_iex2 | map { it[1] })
+    //     .combine(genotyped_iex3 | map { it[1] })
+    // brn = tmp
+    //     .branch{
+    //         index: it =~ /vcf.gz.(csi|tbi)$/
+    //         vcf: it =~ /vcf.gz$/
+    //     }
+    filtered = merge_filter_indelflagged(iex.vcf.collect(), iex.index.collect())
+
+    snvs = genotyped_snvs1.mix(genotyped_snvs2).mix(genotyped_snvs3).mix(filtered)
+        | map { it[1] } 
+        | flatten 
+        | branch {
+            index: it =~ /vcf.gz.(csi|tbi)$/
+            vcf: it =~ /vcf.gz$/
+        }
+    indels = genotyped_indels
+        | map { it[1] } 
+        | flatten 
+        | branch {
+            index: it =~ /vcf.gz.(csi|tbi)$/
+            vcf: it =~ /vcf.gz$/
+        }
+    finalise_snvs(snvs.vcf.collect(), snvs.index.collect())
+    finalise_indels(indels.vcf, indels.index)
 }

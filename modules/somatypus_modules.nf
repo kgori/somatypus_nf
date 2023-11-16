@@ -12,8 +12,6 @@ process individual_calling {
     output:
     tuple val(id), file("platypusVariants_${id}_default.vcf")
 
-    // publishDir 
-
     // # TODO: add $REGIONSARG and $EXTRA
     script:
     """
@@ -41,8 +39,6 @@ process alternative_calling {
 
     output:
     tuple val(id), file("platypusVariants_${id}_alternative.vcf")
-
-    // publishDir 
 
     // # TODO: add $REGIONSARG and $EXTRA
     script:
@@ -73,8 +69,6 @@ process split_calls {
     output:
     tuple val(id), file("${vcf.baseName}.split.vcf")
 
-    // publishDir
-
     script:
     """
     Somatypus_SplitMA-MNVs.py ${vcf} > ${id}_split.log
@@ -94,8 +88,6 @@ process filter_calls {
     output:
     tuple val(id), file("${vcf.baseName}.filtered.vcf")
 
-    // publishDir
-
     script:
     """
     awk '!((\$7 ~ /badReads/) || (\$7 ~ /MQ/) || (\$7 ~ /strandBias/) || (\$7 ~ /SC/) || (\$7 ~ /QD/))' ${vcf} \
@@ -110,8 +102,6 @@ process indel_flag {
     memory { 8.GB * 2**(task.attempt - 1) }
     time 8.h
     maxRetries 2
-
-    publishDir "${params.outputDir}/indel_flagged_SNVs"
 
     input:
     tuple val(id), path(vcf)
@@ -184,8 +174,6 @@ process merge_filtered {
     path "merged/IndelExcludedSNVs_allele1.vcf.gz*"
     path "merged/IndelExcludedSNVs_allele2.vcf.gz*"
     path "merged/IndelExcludedSNVs_allele3.vcf.gz*"
-
-    publishDir "${params.outputDir}/merged"
 
     script:
     """
@@ -301,6 +289,7 @@ process genotype {
     grep "^#" ${source_vcf[0].getSimpleName()}.genotyped.first.vcf \
         > header.txt
     grep -h -v "^#" ${source_vcf[0].getSimpleName()}.genotyped.*.vcf \
+        | awk '!((\$7 ~ /badReads/) || (\$7 ~ /MQ/) || (\$7 ~ /strandBias/) || (\$7 ~ /SC/) || (\$7 ~ /QD/))' \
         | sort -k1,1 -k2,2n -k4,4 -k5,5 \
         > variants.txt
     cut -f2 variants.txt | sort -cn
@@ -351,13 +340,69 @@ process merge_vcf {
     path index_files
 
     output:
-    path "${id}.vcf.gz*"
-
-    publishDir "${params.outputDir}/t" , mode: 'copy'
+    tuple val(id), path("${id}.vcf.gz*")
 
     script:
     """
     bcftools concat --threads ${task.cpus} -a -D -Oz -o ${id}.vcf.gz ${vcf_files}
     bcftools index --csi ${id}.vcf.gz
+    """
+}
+
+process merge_filter_indelflagged {
+    input:
+    path vcf_files
+    path index_files
+
+    output:
+    tuple val("merged.VAFfilt"), path("merged.VAFfilt.vcf.gz*")
+
+    script:
+    """
+    bcftools concat --threads ${task.cpus} -a -D -Ov -o merged.vcf ${vcf_files}
+    Somatypus_IndelRescuedFilter.py merged.vcf > VAFfilter.log
+    bgzip merged.VAFfilt.vcf
+    tabix --csi merged.VAFfilt.vcf.gz
+    rm merged.vcf
+    """
+}
+
+process finalise_snvs {
+    input:
+    path vcf_files
+    path index_files
+
+    output:
+    path "Somatypus_SNVs_final.vcf.gz*"
+
+    publishDir "${params.outputDir}", mode: 'copy'
+
+    script:
+    """
+    bcftools concat --threads ${task.cpus} -a -D -Ov -o merged.vcf ${vcf_files}
+    Somatypus_VAFfilter.py merged.vcf > VAFfilter.log
+    bgzip -c merged.VAFfilt.vcf > Somatypus_SNVs_final.vcf.gz
+    tabix --csi Somatypus_SNVs_final.vcf.gz
+    rm merged.vcf merged.VAFfilt.vcf
+    """
+}
+
+process finalise_indels {
+    input:
+    path vcf_file
+    path index_file
+
+    output:
+    path "Somatypus_Indels_final.vcf.gz*"
+
+    publishDir "${params.outputDir}", mode: 'copy'
+
+    script:
+    """
+    gunzip -c ${vcf_file} > ${vcf_file.baseName}
+    Somatypus_VAFfilter.py ${vcf_file.baseName} > VAFfilter.log
+    bgzip -c "${vcf_file.getBaseName(2)}.VAFfilt.vcf" > Somatypus_Indels_final.vcf.gz
+    tabix --csi Somatypus_Indels_final.vcf.gz
+    rm ${vcf_file.baseName} ${vcf_file.getBaseName(2)}.VAFfilt.vcf
     """
 }
