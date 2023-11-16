@@ -178,7 +178,12 @@ process merge_filtered {
     path(filterlist)
 
     output:
-    path "merged/*.vcf.gz"
+    path "merged/MergedSNVs_allele1.vcf.gz*"
+    path "merged/MergedSNVs_allele2.vcf.gz*"
+    path "merged/MergedSNVs_allele3.vcf.gz*"
+    path "merged/IndelExcludedSNVs_allele1.vcf.gz*"
+    path "merged/IndelExcludedSNVs_allele2.vcf.gz*"
+    path "merged/IndelExcludedSNVs_allele3.vcf.gz*"
 
     publishDir "${params.outputDir}/merged"
 
@@ -195,7 +200,7 @@ process merge_filtered {
             <(sort -k1,1 -k2,2n -k4,4 -k5,5 \${f}) > \${f}.tmp
         mv \${f}.tmp \${f}
         bgzip \${f}
-        tabix \${f}.gz
+        tabix --csi \${f}.gz
     done
     """
 }
@@ -230,25 +235,129 @@ process merge_extracted_indels {
     path vcf
 
     output:
-    file "MergedIndels.vcf.gz"
+    path "MergedIndels.vcf.gz*"
 
     script:
     """
     Somatypus_IndelMerge2.py merge ${vcf} MergedIndels.vcf
     bgzip MergedIndels.vcf
-    tabix MergedIndels.vcf.gz
+    tabix --csi MergedIndels.vcf.gz
     """
 }
 
 process genotype {
-    // cpus 8
-    // executor 'lsf'
-    // queue 'long'
-    // memory 48.GB
-    // time 48.h
+    cpus 8
+    executor 'lsf'
+    queue 'long'
+    memory 48.GB
+    time 48.h
 
     input:
-    tuple val(id), path(alignments), path(vcf)
-    path reference
+    tuple val(bamID), path (alignmentFiles),
+      val(baiID), path (alignmentIndexFiles),
+      val(refID), path (referenceFiles),
+      val(vcfID), path(source_vcf)
 
+    output:
+    tuple val(vcfID), path("${source_vcf[0].getSimpleName()}.genotyped.vcf.gz*")
+
+    // #TODO: log file, regions, extra
+    script:
+    """
+    ls -1 ${alignmentFiles} > bamlist.txt
+    platypus callVariants \
+        --logFileName=${source_vcf[0].getSimpleName()}.log \
+        --refFile=${referenceFiles[0]} \
+        --bamFiles=bamlist.txt \
+        --minPosterior=0 \
+        --nCPU=${task.cpus} \
+        --minReads=3 \
+        --source=${source_vcf[0]} \
+        --getVariantsFromBAMs=0 \
+        -o ${source_vcf[0].getSimpleName()}.genotyped.first.vcf
+
+    tail -n +49 ${source_vcf[0].getSimpleName()}.genotyped.first.vcf | cut -f1,2,4,5 > geno_pos.txt
+    gunzip -c ${source_vcf[0]} | grep -v "#" | cut -f1,2,4,5 > merged_pos.txt
+    grep -vxFf geno_pos.txt merged_pos.txt > coords.txt || [ \$? -eq 1 ]
+
+    awk '{if (length(\$3) >= length(\$4)) { print \$1 ":" \$2 "-" \$2+length(\$3)-1 } else { print \$1 ":" \$2 "-" \$2+length(\$4)-1 }}' coords.txt > missing.txt
+    rm geno_pos.txt merged_pos.txt coords.txt
+
+    if [ -s missing.txt ]; then
+        echo -e "\nGenotyping missing calls\n"
+        platypus callVariants \
+        --logFileName=${source_vcf[0].getSimpleName()}.second.log \
+        --refFile=${referenceFiles[0]} \
+        --bamFiles=bamlist.txt \
+        --regions=missing.txt \
+        --minPosterior=0 \
+        --nCPU=${task.cpus} \
+        --minReads=3 \
+        --source=${source_vcf[0]} \
+        --getVariantsFromBAMs=0 \
+        -o ${source_vcf[0].getSimpleName()}.genotyped.second.vcf
+    fi
+
+    grep "^#" ${source_vcf[0].getSimpleName()}.genotyped.first.vcf \
+        > header.txt
+    grep -h -v "^#" ${source_vcf[0].getSimpleName()}.genotyped.*.vcf \
+        | sort -k1,1 -k2,2n -k4,4 -k5,5 \
+        > variants.txt
+    cut -f2 variants.txt | sort -cn
+    cat header.txt variants.txt | bgzip -c > ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz
+    tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz
+    rm header.txt variants.txt
+    rm *.first.vcf 
+    if [ -s ${source_vcf[0].getSimpleName()}.genotyped.second.vcf ]; then
+        rm *.second.vcf
+    fi
+    """
+}
+
+process split_vcf_into_n_files {
+    input:
+    tuple val(id), path(vcf)
+    val n
+
+    output:
+    path "split_out/${vcf[0].getSimpleName()}-*"
+
+    script:
+    """
+    mkdir split_out
+    Somatypus_SplitVCF.py --vcf ${vcf[0]}  -n ${n} -s Files -o split_out/${vcf[0].getSimpleName()}
+    """
+}
+
+process split_vcf_into_n_rows {
+    input:
+    tuple val(id), path(vcf)
+    val r
+
+    output:
+    path "split_out/${vcf[0].getSimpleName()}-*"
+
+    script:
+    """
+    mkdir split_out
+    Somatypus_SplitVCF.py --vcf ${vcf[0]}  -r ${r} -s Rows -o split_out/${vcf[0].getSimpleName()}
+    """
+}
+
+process merge_vcf {
+    input:
+    val(id)
+    path vcf_files
+    path index_files
+
+    output:
+    path "${id}.vcf.gz*"
+
+    publishDir "${params.outputDir}/t" , mode: 'copy'
+
+    script:
+    """
+    bcftools concat --threads ${task.cpus} -a -D -Oz -o ${id}.vcf.gz ${vcf_files}
+    bcftools index --csi ${id}.vcf.gz
+    """
 }
