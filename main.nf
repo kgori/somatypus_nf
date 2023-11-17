@@ -143,13 +143,6 @@ workflow {
             index: it =~ /vcf.gz.(csi|tbi)$/
             vcf: it =~ /vcf.gz$/
         } 
-    //     .combine(genotyped_iex2 | map { it[1] })
-    //     .combine(genotyped_iex3 | map { it[1] })
-    // brn = tmp
-    //     .branch{
-    //         index: it =~ /vcf.gz.(csi|tbi)$/
-    //         vcf: it =~ /vcf.gz$/
-    //     }
     filtered = merge_filter_indelflagged(iex.vcf.collect(), iex.index.collect())
 
     snvs = genotyped_snvs1.mix(genotyped_snvs2).mix(genotyped_snvs3).mix(filtered)
@@ -167,5 +160,5 @@ workflow {
             vcf: it =~ /vcf.gz$/
         }
     finalise_snvs(snvs.vcf.collect(), snvs.index.collect())
-    finalise_indels(indels.vcf, indels.index)
-}
+    finalise_indels(indels.vcf.collect(), indels.index.collect())
+    }
