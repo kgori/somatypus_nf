@@ -1,11 +1,4 @@
 process individual_calling {
-    cpus { 4 * 2**(task.attempt - 1) }
-    executor 'lsf'
-    queue 'normal'
-    memory { 8.GB * 2**(task.attempt - 1) }
-    time 12.h
-    maxRetries 1
-
     input:
     tuple val(id), file(alignmentFiles), val(ref), file(referenceFiles)
 
@@ -27,13 +20,6 @@ process individual_calling {
 }
 
 process alternative_calling {
-    cpus { 4 * 2**(task.attempt - 1) }
-    executor 'lsf'
-    queue 'normal'
-    memory { 8.GB * 2**(task.attempt - 1) }
-    time 12.h
-    maxRetries 1
-
     input:
     tuple val(id), file(alignmentFiles), val(ref), file(referenceFiles)
 
@@ -57,12 +43,6 @@ process alternative_calling {
 }
 
 process split_calls {
-    cpus 1
-    executor 'lsf'
-    queue 'normal'
-    memory 1.GB
-    time 2.h
-
     input:
     tuple val(id), file(vcf)
 
@@ -76,12 +56,6 @@ process split_calls {
 }
 
 process filter_calls {
-    cpus 1
-    executor 'lsf'
-    queue 'normal'
-    memory 1.GB
-    time 2.h
-
     input:
     tuple val(id), file(vcf)
 
@@ -95,35 +69,7 @@ process filter_calls {
     """
 }
 
-process indel_flag {
-    cpus 1
-    executor 'lsf'
-    queue 'normal'
-    memory { 8.GB * 2**(task.attempt - 1) }
-    time 8.h
-    maxRetries 2
-
-    input:
-    tuple val(id), path(vcf)
-
-    output:
-    file("${vcf.baseName}_indel_flagged_SNVs.txt")
-
-    script:
-    """
-    ls -1 ${vcf} > list.txt
-    Somatypus_IndelFlag.py list.txt ${vcf.baseName}_indel_flagged_SNVs.txt > ${vcf.baseName}_indel_flagged_SNVs.log
-    """
-}
-
 process indel_flag2 {
-    cpus 1
-    executor 'lsf'
-    queue 'normal'
-    memory { 4.GB * 2**(task.attempt - 1) }
-    time 2.h
-    maxRetries 2
-
     input:
     tuple val(id), path(vcf)
 
@@ -138,12 +84,6 @@ process indel_flag2 {
 }
 
 process merge_indel_flagged {
-    cpus 1
-    executor 'lsf'
-    queue 'normal'
-    memory 16.GB
-    time 2.h
-    
     input:
     path(txt)
 
@@ -157,12 +97,6 @@ process merge_indel_flagged {
 }
 
 process merge_filtered {
-    cpus 1
-    executor 'lsf'
-    queue 'normal'
-    memory 16.GB
-    time 12.h
-
     input:
     path(vcf)
     path(filterlist)
@@ -194,12 +128,6 @@ process merge_filtered {
 }
 
 process extract_indels {
-    cpus 1
-    executor 'lsf'
-    queue 'normal'
-    memory 4.GB
-    time 2.h
-
     input:
     tuple val(id), path(vcf)
 
@@ -213,12 +141,6 @@ process extract_indels {
 }
 
 process merge_extracted_indels {
-    cpus 1
-    executor 'lsf'
-    queue 'normal'
-    memory 16.GB
-    time 2.h
-
     input:
     path vcf
 
@@ -234,12 +156,6 @@ process merge_extracted_indels {
 }
 
 process genotype {
-    cpus 8
-    executor 'lsf'
-    queue 'long'
-    memory 48.GB
-    time 48.h
-
     input:
     tuple val(bamID), path (alignmentFiles),
       val(baiID), path (alignmentIndexFiles),
@@ -334,6 +250,8 @@ process split_vcf_into_n_rows {
 }
 
 process merge_vcf {
+    label 'bcfmerge'
+
     input:
     val(id)
     path vcf_files
@@ -350,6 +268,8 @@ process merge_vcf {
 }
 
 process merge_filter_indelflagged {
+    label 'bcfmerge'
+
     input:
     path vcf_files
     path index_files
@@ -368,6 +288,8 @@ process merge_filter_indelflagged {
 }
 
 process finalise_snvs {
+    label 'bcfmerge'
+
     input:
     path vcf_files
     path index_files
