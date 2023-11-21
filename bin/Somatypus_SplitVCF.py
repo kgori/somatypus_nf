@@ -113,7 +113,7 @@ def process_file_strategy_r(f, rows_per_file, outprefix):
     except Exception as e:
         raise SomatypusError('Error processing line {}: {}'.format(rows_written_total + 1, e))
     finally:
-        if not outfile.closed:
+        if outfile and not outfile.closed:
             outfile.close()
 
 def main():

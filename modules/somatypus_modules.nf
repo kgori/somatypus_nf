@@ -182,11 +182,11 @@ process genotype {
     output:
     tuple val(vcfID), path("${source_vcf[0].getSimpleName()}.genotyped.vcf.gz*")
 
-    // #TODO: log file, regions, extra
     script:
     """
     ls -1 ${alignmentFiles} > bamlist.txt
-    Somatypus_CreateGenotypingRegions.py -o regions.txt -w 100000 ${source_vcf[0]}
+    Somatypus_CreateGenotypingRegions.py -o regions.txt -w 1000 ${source_vcf[0]}
+    cat regions.txt | tr ':' '\t' | tr '-' '\t' | sort -c -k1,1 -k2n,2n -k3n,3n
     platypus callVariants \
         --logFileName=${source_vcf[0].getSimpleName()}.log \
         --refFile=${referenceFiles[0]} \

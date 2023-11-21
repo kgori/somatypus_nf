@@ -3,7 +3,7 @@
 import gzip
 import os
 import sys
-from collections import OrderedDict
+from somatypus_utility_lib import Interval, get_variant_from_line
 
 class ProgramArgException(Exception):
     pass
@@ -38,7 +38,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Create genotyping regions')
     parser.add_argument('filename', help='VCF/VCF.gz file')
     parser.add_argument('-o', '--output', help='Output file name', default='regions.txt')
-    parser.add_argument('-w', '--window', type=int, default=100000, help='Window size')
+    parser.add_argument('-w', '--window', type=int, default=1000, help='Window size')
     return parser.parse_args()
 
 def check_args(args):
@@ -53,31 +53,48 @@ def print_user_info(args):
     sys.stdout.write('Output will go to {}\n'.format(args.output))
 
 def run(args):
-    regions = OrderedDict()
+    chrs = []
+    regions = {}
+
     with FileReader(args.filename) as fl:
         for line in fl:
             if line.startswith('#'):
                 continue
-            fields = line.strip().split('\t')
-            chrom = fields[0]
-            pos = int(fields[1])
-            start = pos - (pos % args.window) + 1
-            end = start + args.window - 1
-            if end - start + 1 != args.window:
-                raise ProgramLogicException(
-                        'Window size is not right: {}:{} start={} end={} window={}'.format(
-                            chrom, pos, start, end, args.window))
-            if pos < start or pos > end:
-                raise ProgramLogicException(
-                        'Window doesn\'t enclose position: {}:{} start={} end={} window={}'.format(
-                            chrom, pos, start, end, args.window))
+            variant = get_variant_from_line(line)
+            if variant.chrom not in chrs:
+                chrs.append(variant.chrom)
+                regions[variant.chrom] = []
+            ivl = Interval(max(1, variant.pos - args.window + 1), variant.pos + args.window)
+            if len(regions[variant.chrom]) == 0:
+                regions[variant.chrom].append(ivl)
+            else:
+                prev = regions[variant.chrom][-1]
+                if prev.intersects(ivl):
+                    prev.absorb(ivl)
+                else:
+                    regions[variant.chrom].append(ivl)
+            # The current pos should be within the most recently added interval
+            if not variant.pos in regions[variant.chrom][-1]:
+                raise ProgramLogicException('Variant position {} not in {}'.format(variant.pos, regions[variant.chrom][-1]))
 
-            regions[(chrom, start, end)] = pos
-    return regions
+    result = []
+    for chr in chrs:
+        # For each chromosome the intervals should be sorted and disjoint
+        if len(regions[chr]) > 1:
+            for i in range(len(regions[chr])-1):
+                if not regions[chr][i] < regions[chr][i+1]:
+                    raise ProgramLogicException('Intervals are unsorted')
+                if regions[chr][i].intersects(regions[chr][i+1]):
+                    raise ProgramLogicException('Intervals are not disjoint')
+
+        for ivl in regions[chr]:
+            result.append((chr, ivl.lower, ivl.upper))
+
+    return result
 
 def write_output(args, regions):
     with open(args.output, 'w') as fl:
-        for (chrom, start, end) in regions.keys():
+        for (chrom, start, end) in regions:
             fl.write('{}:{}-{}\n'.format(chrom, start, end))
 
 def main():
