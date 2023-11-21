@@ -1,3 +1,18 @@
+def handle_arg(arg, prefix) {
+    if (arg) {
+        return "${prefix}${arg}"
+    } else {
+        return ""
+    }
+}
+
+regions = handle_arg(params.regions, "--regions=")
+extra = handle_arg(params.extra, "")
+
+if (extra =~ "--logFileName|--refFile|--bamFiles|--regions|--minPosterior|--minReads|--minFlank|--trimReadFlank|--source|--getVariantsFromBAMs|--nCPU|--output|-o") {
+    error("ERROR: Additional Platypus options cannot include --logFileName, --refFile, --bamFiles, --regions, --minPosterior, --minReads, --minFlank, --trimReadFlank, --source, --getVariantsFromBAMs, --nCPU, --output, or -o.")
+}
+
 process individual_calling {
     input:
     tuple val(id), file(alignmentFiles), val(ref), file(referenceFiles)
@@ -5,7 +20,6 @@ process individual_calling {
     output:
     tuple val(id), file("platypusVariants_${id}_default.vcf")
 
-    // # TODO: add $REGIONSARG and $EXTRA
     script:
     """
     platypus callVariants \
@@ -15,6 +29,8 @@ process individual_calling {
         --minPosterior=0 \
         --minReads=3 \
         --nCPU=${task.cpus} \
+        ${regions} \
+        ${extra} \
         -o platypusVariants_${id}_default.vcf
     """
 }
@@ -26,7 +42,6 @@ process alternative_calling {
     output:
     tuple val(id), file("platypusVariants_${id}_alternative.vcf")
 
-    // # TODO: add $REGIONSARG and $EXTRA
     script:
     """
     platypus callVariants \
@@ -38,6 +53,8 @@ process alternative_calling {
         --minFlank=0 \
         --trimReadFlank=10 \
         --nCPU=${task.cpus} \
+        ${regions} \
+        ${extra} \
         -o platypusVariants_${id}_alternative.vcf
     """
 }
