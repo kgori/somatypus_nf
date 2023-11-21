@@ -186,6 +186,7 @@ process genotype {
     script:
     """
     ls -1 ${alignmentFiles} > bamlist.txt
+    Somatypus_CreateGenotypingRegions.py -o regions.txt -w 100000 ${source_vcf[0]}
     platypus callVariants \
         --logFileName=${source_vcf[0].getSimpleName()}.log \
         --refFile=${referenceFiles[0]} \
@@ -195,6 +196,7 @@ process genotype {
         --minReads=3 \
         --source=${source_vcf[0]} \
         --getVariantsFromBAMs=0 \
+        --regions=regions.txt \
         -o ${source_vcf[0].getSimpleName()}.genotyped.first.vcf
 
     tail -n +49 ${source_vcf[0].getSimpleName()}.genotyped.first.vcf | cut -f1,2,4,5 > geno_pos.txt
