@@ -227,7 +227,6 @@ process genotype {
         | awk '!((\$7 ~ /badReads/) || (\$7 ~ /MQ/) || (\$7 ~ /strandBias/) || (\$7 ~ /SC/) || (\$7 ~ /QD/))' \
         | sort -k1,1 -k2,2n -k4,4 -k5,5 \
         > variants.txt
-    cut -f2 variants.txt | sort -cn
     cat header.txt variants.txt | bgzip -c > ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz
     tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz
     rm header.txt variants.txt
