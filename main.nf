@@ -3,7 +3,8 @@ params.inputDir
 params.reference
 params.regions = ""
 params.extra = ""
-params.vcfSplitSize = 2000000
+params.vcfSplitSize = 500000
+params.indelSplitSize = 500000
 
 def pair_vcfs_with_index(ch) {
     // ch is a flat channel of VCFs and index files
@@ -46,8 +47,10 @@ def remove_duplicate_filepair_keys(primary_ch, secondary_ch) {
 /* STEPS 8-16 */include { genotype as genotype_indels }                        from "./modules/somatypus_modules.nf"
 /* STEPS 8-16 */include { split_vcf_into_n_rows as split_merged_snvs }         from "./modules/somatypus_modules.nf"
 /* STEPS 8-16 */include { split_vcf_into_n_rows as split_indel_excluded_snvs } from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { split_vcf_into_n_rows as split_indels }              from "./modules/somatypus_modules.nf"
 /* STEPS 8-16 */include { merge_vcf as merge_genotyped_merged_snvs }           from "./modules/somatypus_modules.nf"
 /* STEPS 8-16 */include { merge_vcf as merge_genotyped_indel_excluded_snvs }   from "./modules/somatypus_modules.nf"
+/* STEPS 8-16 */include { merge_vcf as merge_genotyped_indels }                from "./modules/somatypus_modules.nf"
 /* STEP 17 */   include { merge_filter_indelflagged }                          from "./modules/somatypus_modules.nf"
 /* STEP 17 */   include { finalise_snvs }                                      from "./modules/somatypus_modules.nf"
 /* STEP 17 */   include { finalise_indels }                                    from "./modules/somatypus_modules.nf"
@@ -90,8 +93,11 @@ workflow {
         .map { it -> tuple ( it.baseName - ~/.gz/, it ) } | groupTuple
     indel_excluded_allele2 = snv_merged[4] | pair_vcfs_with_index
     indel_excluded_allele3 = snv_merged[5] | pair_vcfs_with_index
-    indels = merged_indels | pair_vcfs_with_index
+    indels = split_indels(merged_indels[0] | pair_vcfs_with_index, "${params.indelSplitSize}")
+        .flatten()
+        .map { it -> tuple ( it.baseName - ~/.gz/, it ) } | groupTuple
 
+    /* Scatter-gather on SNVs */
     genotyped_snvs1_tmp = genotype_merged_snvs_allele1(bams
         .combine(bais)
         .combine(reference)
@@ -111,6 +117,7 @@ workflow {
       .combine(reference)
       .combine(merged_snvs_allele3))
 
+    /* Scatter-gather on indel-excluded SNVs */
     genotyped_iex1_tmp = genotype_indel_excluded_snvs_allele1(bams
       .combine(bais)
       .combine(reference)
@@ -130,10 +137,15 @@ workflow {
       .combine(reference)
       .combine(indel_excluded_allele3))
 
-    genotyped_indels = genotype_indels(bams
-      .combine(bais)
-      .combine(reference)
-      .combine(indels))
+    /* Scatter-gather on indels */
+    genotyped_indels_tmp = genotype_indels(bams
+        .combine(bais)
+        .combine(reference)
+        .combine(indels))
+    genotyped_indels = merge_genotyped_indels(
+        Channel.value("Indels"),
+        genotyped_indels_tmp.map{ it[1][0] } | collect,
+        genotyped_indels_tmp.map{ it[1][1] } | collect)
 
     // Steps 17-18 to merge the results
     iex = genotyped_iex1.mix(genotyped_iex2).mix(genotyped_iex3)
