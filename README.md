@@ -8,7 +8,7 @@ the [Transmissible Cancer Group](https://www.tcg.vet.cam.ac.uk/) at the Universi
 
 ## Description
 
-The somatypus_nf pipeline is derived from Adrian Baez-Ortega's Somatypus pipeline.
+The somatypus_nf pipeline is derived from Adrian Baez-Ortega's [Somatypus](https://github.com/baezortega/somatypus) pipeline.
 Its main component is [Platypus](https://github.com/andyrimmer/Platypus).
 Specifically, somatypus_nf uses my [fork](https://github.com/kgori/Platypus) of the Platypus software,
 which is able to read VCF files with `csi`-format indices. This is needed to work with genomes
