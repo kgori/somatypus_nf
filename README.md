@@ -1,12 +1,12 @@
 somatypus_nf
 ============
 
-*Summary*
+## Summary
 
 This is an implementation of the SNV and Indel variant calling pipeline used by
 the [Transmissible Cancer Group](https://www.tcg.vet.cam.ac.uk/) at the University of Cambridge.
 
-*Description*
+## Description
 
 The somatypus_nf pipeline is derived from Adrian Baez-Ortega's Somatypus pipeline.
 Its main component is [Platypus](https://github.com/andyrimmer/Platypus).
@@ -20,7 +20,8 @@ This repository contains an example nextflow config, which is the one I use to r
 the [Sanger](https://www.sanger.ac.uk/) Farm. It should be possible to get the pipeline to run on
 any other platform with some tweaking of this config file, but I can't guarantee this.
 
-*Software Dependencies*
+## Software Dependencies
+
  - python 2.7 (for Platypus)
    - pysam 0.20.0
    - cython 0.29.15
@@ -31,6 +32,7 @@ any other platform with some tweaking of this config file, but I can't guarantee
  - vcftools
 
  There's a Dockerfile in this repo that will build a container with all the dependencies installed.
- You can download the container from Docker hub, e.g.
+ You can [download the container](https://hub.docker.com/repository/docker/kgori/somatypus-dev/general) from Docker hub, e.g.
+
      docker pull kgori/somatypus-dev:latest
      singularity pull somatypus_container.sif docker://kgori/somatypus-dev:latest
