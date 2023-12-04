@@ -72,8 +72,9 @@ print 'Output file: ', outFile
 # Extract SNVs from each sample, if they are not in the exclude list
 count1 = 0
 count2 = 0
+errors = 0
 with open(vcfFile, 'r') as vcf, open(outFile, 'w') as out:
-    for line in vcf:
+    for lineno, line in enumerate(vcf):
         if line.startswith('#'):
             out.write(line)
         else:
@@ -82,20 +83,25 @@ with open(vcfFile, 'r') as vcf, open(outFile, 'w') as out:
             cov = []
             # Extract sample data
             data = line.strip().split('\t')[9:]
-            for record in data:
-                # Extract total reads (nr) and supp. reads (nv)
-                nr = float(record.split(':')[4])
-                nv = float(record.split(':')[5])
-                # Add coverage and VAF values to list
-                cov.append(nr)
-                if nv >= MINREADS:
-                    vaf.append(nv / nr)
-                    
-            # If coverage and VAF values are not beyond thresholds, write to output
-            if median(cov) >= MINCOV and median(vaf) >= MINVAF and median(vaf) <= MAXVAF:
-                count2 = count2 + 1
-                out.write(line)
+            try:
+                for record in data:
+                    # Extract total reads (nr) and supp. reads (nv)
+                    nr = float(record.split(':')[4])
+                    nv = float(record.split(':')[5])
+                    # Add coverage and VAF values to list
+                    cov.append(nr)
+                    if nv >= MINREADS:
+                        vaf.append(nv / nr)
+
+                # If coverage and VAF values are not beyond thresholds, write to output
+                if median(cov) >= MINCOV and median(vaf) >= MINVAF and median(vaf) <= MAXVAF:
+                    count2 = count2 + 1
+                    out.write(line)
+            except ValueError as e:
+                errors += 1
+                print 'Error occurred at line {}: {}'.format(lineno + 1, str(e))
                 
                 
 print '\n' + str(count1 - count2) + ' variants discarded'
+print '\n' + str(errors) + ' error{} found'.format('' if errors == 1 else 's')
 print 'Done\n'
