@@ -188,7 +188,7 @@ process genotype {
     Somatypus_CreateGenotypingRegions.py -o regions.txt -w 200 ${source_vcf[0]}
     cat regions.txt | tr ':' '\t' | tr '-' '\t' | sort -c -k1,1 -k2n,2n -k3n,3n
 
-    bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\n' ${source_vcf[0]} > positions_expected.txt
+    bcftools query -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' ${source_vcf[0]} > positions_expected.txt
 
     platypus callVariants \
         --logFileName=${source_vcf[0].getSimpleName()}.log \
@@ -205,14 +205,14 @@ process genotype {
     bgzip ${source_vcf[0].getSimpleName()}.genotyped.first.vcf
     tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.first.vcf.gz
 
-    bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\n' \
+    bcftools query -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' \
       ${source_vcf[0].getSimpleName()}.genotyped.first.vcf.gz \
       > positions_obtained.txt
 
     grep -vxFf positions_obtained.txt positions_expected.txt > positions_missing.txt || [ \$? -eq 1 ]
 
     if [ -s positions_missing.txt ]; then
-        echo -e "\nGenotyping missing calls\n"
+        echo -e "\\nGenotyping missing calls\\n"
 
         bcftools isec --complement -w1 -Oz -o ${source_vcf[0].getSimpleName()}.second_source.vcf.gz ${source_vcf[0]} ${source_vcf[0].getSimpleName()}.genotyped.first.vcf.gz
         tabix --csi ${source_vcf[0].getSimpleName()}.second_source.vcf.gz
@@ -233,7 +233,7 @@ process genotype {
         bgzip ${source_vcf[0].getSimpleName()}.genotyped.second.vcf
         tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.second.vcf.gz
 
-        bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\n' ${source_vcf[0].getSimpleName()}.genotyped.second.vcf.gz > positions_obtained_2ndpass.txt
+        bcftools query -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' ${source_vcf[0].getSimpleName()}.genotyped.second.vcf.gz > positions_obtained_2ndpass.txt
     fi
 
     cat positions_obtained* \
@@ -243,7 +243,7 @@ process genotype {
     grep -vxFf positions_obtained_final.txt positions_expected.txt > positions_still_missing.txt || exit_code=\$?
 
     # if [[ \$exit_code -ne 1 ]]; then
-    #     echo -e "\nERROR: Some positions are still missing from the genotyped VCF. Please check the log files.\n"
+    #     echo -e "\\nERROR: Some positions are still missing from the genotyped VCF. Please check the log files.\\n"
     #     exit 1
     # fi
 
