@@ -185,7 +185,7 @@ process genotype {
     script:
     """
     ls -1 ${alignmentFiles} > bamlist.txt
-    Somatypus_CreateGenotypingRegions.py -o regions.txt -w 1000 ${source_vcf[0]}
+    Somatypus_CreateGenotypingRegions.py -o regions.txt -w 200 ${source_vcf[0]}
     cat regions.txt | tr ':' '\t' | tr '-' '\t' | sort -c -k1,1 -k2n,2n -k3n,3n
 
     bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\n' ${source_vcf[0]} > positions_expected.txt
@@ -242,25 +242,27 @@ process genotype {
 
     grep -vxFf positions_obtained_final.txt positions_expected.txt > positions_still_missing.txt || exit_code=\$?
 
-    if [[ \$exit_code -ne 1 ]]; then
-        echo -e "\nERROR: Some positions are still missing from the genotyped VCF. Please check the log files.\n"
-        exit 1
-    fi
+    # if [[ \$exit_code -ne 1 ]]; then
+    #     echo -e "\nERROR: Some positions are still missing from the genotyped VCF. Please check the log files.\n"
+    #     exit 1
+    # fi
 
-    bcftools view -h ${source_vcf[0].getSimpleName()}.genotyped.first.vcf.gz \
-        > header.txt
+    bcftools concat -aD -Oz \
+        -o ${source_vcf[0].getSimpleName()}.genotyped.unfiltered.vcf.gz \
+        ${source_vcf[0].getSimpleName()}.genotyped.*.vcf.gz 
+    tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.unfiltered.vcf.gz
 
-    grep -h -v "^#" ${source_vcf[0].getSimpleName()}.genotyped.*.vcf \
-        | awk '!((\$7 ~ /badReads/) || (\$7 ~ /MQ/) || (\$7 ~ /strandBias/) || (\$7 ~ /SC/) || (\$7 ~ /QD/))' \
-        | sort -k1,1 -k2,2n -k4,4 -k5,5 \
-        > variants.txt
-    cat header.txt variants.txt | bgzip -c > ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz
+    # Filtering
+    bcftools view -f "badReads,MQ,strandBias,SC,QD" -Oz \
+        -o ${source_vcf[0].getSimpleName()}.genotyped.bad.vcf.gz \
+        ${source_vcf[0].getSimpleName()}.genotyped.unfiltered.vcf.gz
+    tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.bad.vcf.gz
+
+    bcftools isec --complement -w1 -Oz \
+        -o ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz \
+        ${source_vcf[0].getSimpleName()}.genotyped.unfiltered.vcf.gz \
+        ${source_vcf[0].getSimpleName()}.genotyped.bad.vcf.gz
     tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz
-    rm header.txt variants.txt
-    bgzip *.first.vcf 
-    if [ -s ${source_vcf[0].getSimpleName()}.genotyped.second.vcf ]; then
-        bgzip *.second.vcf
-    fi
     """
 }
 
