@@ -187,6 +187,9 @@ process genotype {
     ls -1 ${alignmentFiles} > bamlist.txt
     Somatypus_CreateGenotypingRegions.py -o regions.txt -w 1000 ${source_vcf[0]}
     cat regions.txt | tr ':' '\t' | tr '-' '\t' | sort -c -k1,1 -k2n,2n -k3n,3n
+
+    bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\n' ${source_vcf[0]} > positions_expected.txt
+
     platypus callVariants \
         --logFileName=${source_vcf[0].getSimpleName()}.log \
         --refFile=${referenceFiles[0]} \
@@ -199,30 +202,54 @@ process genotype {
         --regions=regions.txt \
         -o ${source_vcf[0].getSimpleName()}.genotyped.first.vcf
 
-    tail -n +49 ${source_vcf[0].getSimpleName()}.genotyped.first.vcf | cut -f1,2,4,5 > geno_pos.txt
-    gunzip -c ${source_vcf[0]} | grep -v "#" | cut -f1,2,4,5 > merged_pos.txt
-    grep -vxFf geno_pos.txt merged_pos.txt > coords.txt || [ \$? -eq 1 ]
+    bgzip ${source_vcf[0].getSimpleName()}.genotyped.first.vcf
+    tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.first.vcf.gz
 
-    awk '{if (length(\$3) >= length(\$4)) { print \$1 ":" \$2 "-" \$2+length(\$3)-1 } else { print \$1 ":" \$2 "-" \$2+length(\$4)-1 }}' coords.txt > missing.txt
-    rm geno_pos.txt merged_pos.txt coords.txt
+    bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\n' \
+      ${source_vcf[0].getSimpleName()}.genotyped.first.vcf.gz \
+      > positions_obtained.txt
 
-    if [ -s missing.txt ]; then
+    grep -vxFf positions_obtained.txt positions_expected.txt > positions_missing.txt || [ \$? -eq 1 ]
+
+    if [ -s positions_missing.txt ]; then
         echo -e "\nGenotyping missing calls\n"
+
+        bcftools isec --complement -w1 -Oz -o ${source_vcf[0].getSimpleName()}.second_source.vcf.gz ${source_vcf[0]} ${source_vcf[0].getSimpleName()}.genotyped.first.vcf.gz
+        tabix --csi ${source_vcf[0].getSimpleName()}.second_source.vcf.gz
+        Somatypus_CreateGenotypingRegions.py -o missing_regions.txt -w 0 ${source_vcf[0].getSimpleName()}.second_source.vcf.gz
+
         platypus callVariants \
         --logFileName=${source_vcf[0].getSimpleName()}.second.log \
         --refFile=${referenceFiles[0]} \
         --bamFiles=bamlist.txt \
-        --regions=missing.txt \
+        --regions=missing_regions.txt \
         --minPosterior=0 \
         --nCPU=${task.cpus} \
         --minReads=3 \
-        --source=${source_vcf[0]} \
+        --source=${source_vcf[0].getSimpleName()}.second_source.vcf.gz \
         --getVariantsFromBAMs=0 \
         -o ${source_vcf[0].getSimpleName()}.genotyped.second.vcf
+
+        bgzip ${source_vcf[0].getSimpleName()}.genotyped.second.vcf
+        tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.second.vcf.gz
+
+        bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\n' ${source_vcf[0].getSimpleName()}.genotyped.second.vcf.gz > positions_obtained_2ndpass.txt
     fi
 
-    grep "^#" ${source_vcf[0].getSimpleName()}.genotyped.first.vcf \
+    cat positions_obtained* \
+        | sort -k1,1 -k2,2n -k3,3 -k4,4 \
+        | uniq > positions_obtained_final.txt
+
+    grep -vxFf positions_obtained_final.txt positions_expected.txt > positions_still_missing.txt || exit_code=\$?
+
+    if [[ \$exit_code -ne 1 ]]; then
+        echo -e "\nERROR: Some positions are still missing from the genotyped VCF. Please check the log files.\n"
+        exit 1
+    fi
+
+    bcftools view -h ${source_vcf[0].getSimpleName()}.genotyped.first.vcf.gz \
         > header.txt
+
     grep -h -v "^#" ${source_vcf[0].getSimpleName()}.genotyped.*.vcf \
         | awk '!((\$7 ~ /badReads/) || (\$7 ~ /MQ/) || (\$7 ~ /strandBias/) || (\$7 ~ /SC/) || (\$7 ~ /QD/))' \
         | sort -k1,1 -k2,2n -k4,4 -k5,5 \
@@ -230,9 +257,9 @@ process genotype {
     cat header.txt variants.txt | bgzip -c > ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz
     tabix --csi ${source_vcf[0].getSimpleName()}.genotyped.vcf.gz
     rm header.txt variants.txt
-    rm *.first.vcf 
+    bgzip *.first.vcf 
     if [ -s ${source_vcf[0].getSimpleName()}.genotyped.second.vcf ]; then
-        rm *.second.vcf
+        bgzip *.second.vcf
     fi
     """
 }

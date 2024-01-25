@@ -1,5 +1,17 @@
 #!/usr/bin/env python
 
+"""
+Creates genotyping regions for Platypus from a VCF file
+
+The output file will contain a list of regions in the format:
+   chr:start-end
+
+Also,
+1: Fits the region to the size of the variant (i.e. indel size, or 2bp for doublet SNPs)
+2: Adds a window of '-w' bases around each variant
+3: Merges overlapping windows
+4: Sorts the windows by chromosome and position
+"""
 import gzip
 import os
 import sys
@@ -42,8 +54,8 @@ def parse_args():
     return parser.parse_args()
 
 def check_args(args):
-    if args.window < 1:
-        raise ProgramArgException('Window size must be greater than 0')
+    if args.window < 0:
+        raise ProgramArgException('Window size must be 0 or greater')
     if not os.path.isfile(args.filename):
         raise ProgramArgException('File {} does not exist'.format(args.filename))
 
@@ -51,6 +63,9 @@ def print_user_info(args):
     sys.stdout.write('Creating genotyping regions for {}\n'.format(args.filename))
     sys.stdout.write('Using window size = {}\n'.format(args.window))
     sys.stdout.write('Output will go to {}\n'.format(args.output))
+
+def abs(x):
+    return x if x >= 0 else -x
 
 def run(args):
     chrs = []
@@ -61,10 +76,26 @@ def run(args):
             if line.startswith('#'):
                 continue
             variant = get_variant_from_line(line)
+
+            if variant.is_multiallelic():
+                raise ProgramLogicException('Multiallelic variants are not supported')
+
             if variant.chrom not in chrs:
                 chrs.append(variant.chrom)
                 regions[variant.chrom] = []
-            ivl = Interval(max(1, variant.pos - args.window + 1), variant.pos + args.window)
+
+            variant_size = abs(len(variant.ref) - len(variant.alt)) + 1
+            ivl_start = variant.pos
+            ivl_end = variant.pos + variant_size - 1
+
+            # Adjust the interval with the window size
+            ivl_start = max(1, ivl_start - args.window)
+            ivl_end = max(ivl_start, ivl_end + args.window)
+            ivl = Interval(ivl_start, ivl_end)
+
+            if not variant.pos in ivl:
+                raise ProgramLogicException('Created interval does not contain the variant position: pos={}, ivl={}'.format(variant.pos, ivl))
+
             if len(regions[variant.chrom]) == 0:
                 regions[variant.chrom].append(ivl)
             else:
