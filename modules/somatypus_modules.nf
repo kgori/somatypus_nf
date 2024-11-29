@@ -350,7 +350,9 @@ process finalise_snvs {
     """
     bcftools concat --threads ${task.cpus} -a -D -Ov -o merged.vcf ${vcf_files}
     Somatypus_VAFfilter.py merged.vcf > VAFfilter.log
-    bgzip -c merged.VAFfilt.vcf > Somatypus_SNVs_final.vcf.gz
+    (bcftools view -h merged.VAFfilt.vcf | grep -v "##contig=<ID=";\
+     bcftools view -H merged.VAFfilt.vcf | sort -k1,1 -k2,2n -k4,4 -k5,5 --parallel=${task.cpus}) \
+        | bcftools view -Oz -o Somatypus_SNVs_final.vcf.gz -
     tabix --csi Somatypus_SNVs_final.vcf.gz
     rm merged.vcf merged.VAFfilt.vcf
     """
@@ -370,7 +372,9 @@ process finalise_indels {
     """
     gunzip -c ${vcf_file} > ${vcf_file.baseName}
     Somatypus_VAFfilter.py ${vcf_file.baseName} > VAFfilter.log
-    bgzip -c "${vcf_file.getBaseName(2)}.VAFfilt.vcf" > Somatypus_Indels_final.vcf.gz
+    (bcftools view -h ${vcf_file.getBaseName(2)}.VAFfilt.vcf | grep -v "##contig=<ID=";\
+     bcftools view -H ${vcf_file.getBaseName(2)}.VAFfilt.vcf | sort -k1,1 -k2,2n -k4,4 -k5,5 --parallel=${task.cpus}) \
+        | bcftools view -Oz -o Somatypus_Indels_final.vcf.gz -
     tabix --csi Somatypus_Indels_final.vcf.gz
     rm ${vcf_file.baseName} ${vcf_file.getBaseName(2)}.VAFfilt.vcf
     """
