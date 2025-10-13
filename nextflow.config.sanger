@@ -1,13 +1,14 @@
 /*  SOMATYPUS NEXTFLOW CONFIG
     This is a place to set all the options relating to how the jobs run on
-    the compute cluster. The settings below are an example: they might not
-    run on your system.
+    the compute cluster. The file is initially set up with reasonable defaults
+    for running on the LSF cluster used by the Sanger.
 
     See https://www.nextflow.io/docs/latest/config.html for more information.
 */
 
 /*  Sanger's LSF setup requires that perJobMemLimit be set to true */
 executor {
+    perJobMemLimit = true
     queueSize = 200 /* max LSF jobs that can run concurrently */
 }
 
@@ -28,22 +29,18 @@ singularity {
     so they can be set up to use more resources.
 */
 process {
-    container = 'somatypus-dev.sif'
-    
-    /* If using Cram file inputs, you may need to set the REF_PATH environment
-     variable inside the container, to be able to decode reads. */
-    containerOptions = '-B /rds:rds --env REF_PATH=$REF_PATH'
-    
-    executor = 'slurm' /* or LSF, or whatever */
-    
-    /* Job queues will need to be set for your system */
+    /* If using Cram file inputs, set the container's REF_PATH to whatever the 
+       `sanger-samtools-refpath` module gives you, otherwise there may be
+       errors trying to decode reads. */
+    container = 'container/somatypus-dev.sif'
+    containerOptions = '-B /lustre:/lustre -B /nfs:/nfs --env REF_PATH=/lustre/scratch125/core/sciops_repository/cram_cache/%2s/%2s/%s:/lustre/scratch126/core/sciops_repository/cram_cache/%2s/%2s/%s:URL=http:://refcache.dnapipelines.sanger.ac.uk::8000/%s'
+
+    executor = 'lsf'
     queue = { if (task.time > 48.h) { 'basement' } else if (task.time > 12.h) { 'long' } else { 'normal' } }
-    
     cpus = 1
     memory = 2.GB
     time = 4.h
 
-    /* Pipeline steps can have their own resource allocations */
     withName:individual_calling {
         cpus = { 8 * 2 ** (task.attempt - 1) }
         memory = { 2.GB * task.cpus }
